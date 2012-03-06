@@ -1,0 +1,53 @@
+A somewhat generic module to repost entries to various social sites: Twitter,
+Facebook, Livejournal, Blogger etc.
+
+The module itself is very dumb:
+
+- read a list of modules that can actually repost stuff
+- retrieve a reposting function from each module
+- call each such function in turn
+
+================================================================================
+
+Reposting modules
+-----------------
+
+Should implement exactly one function: repost_function/2
+
+First argument to this function: configuration values specified for this module
+Second argument: Zotonic context
+
+This function must return a fun/2. This function will be called with EntryId as
+the first argument and Zotonic Context as second argument.
+
+Example:
+--------
+
+-module(dummy_repost_).
+
+repost_function(Config, Context) ->
+  Username = proplists:get_value(username, Config),
+  Password = proplists:get_value(password, Config),
+  Fun = fun(EntryId, Context) -> 
+          repost(Username, Password, EntryId)
+        end,
+  Fun.
+
+repost(Username, Password, EntryId, Context) ->
+  Body  = m_rsc:p(EntryId, body, Context),
+  do_an_update_on_a_remote_site(Username, Password, Body).
+
+================================================================================
+
+Configuration
+-----------------
+
+There should be an entry called mod_repost in your config. It should contain 
+configuration parameters for each repost module you want to use.
+
+{mod_repost, [ {dummy_repost, [ {username, "foo"}
+                              , {password, "bar"}]}
+             , {repost_livejournal, [ {username, "foo"}
+                                    , {password, "bar"}
+                                    , {journal,  "test_journal"]}
+             ]}.

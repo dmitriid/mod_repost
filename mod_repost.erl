@@ -19,26 +19,25 @@
 %%
 %% @doc When resource update is done, repost it
 %%
-observe_rsc_update_done( {_Action, Id, _Pre, _Post, _PreProps, _PostProps}
+observe_rsc_update_done( {_Action, EntryId, _Pre, _Post, _PreProps, _PostProps}
                        , Context) ->
-  case can_repost(Id, Context) of ->
-    true  -> repost(Id, Context);
+  case can_repost(EntryId, Context) of ->
+    true  -> repost(EntryId, Context);
     false -> ok;
   end.
 
 %%
 %% @doc Repost only if it's published and is not a category
 %%
-can_repost(Id, Context) ->
-  m_rsc:is_visible(Id, Contex) and m_rsc:get(Id, Context) =:= [].
+can_repost(EntryId, Context) ->
+  m_rsc:is_visible(EntryId, Contex) and m_rsc:get(Id, Context) =:= [].
 
 %%
 %% @doc Retrieve the actual entry, gather all reposting functions, fire them
 %%
-repost(Id, Context) ->
-  Entry = m_rsc:get(Id, Context),
+repost(EntryId, Context) ->
   RepostFunctions = get_repost_functions(Context),
-  do_repost(RepostFunctions, Entry, Context).
+  do_repost(RepostFunctions, EntryId, Context).
 
 %%
 %% @doc Retrieve a list of repost modules and their configurations
@@ -59,5 +58,5 @@ get_repost_functions([Module|T], Context, Acc) ->
 %%
 do_repost([], _Entry, _Context) ->
   ok;
-do_repost([Fun|T], Entry, Context) ->
-  Fun(Entry, Context).
+do_repost([Fun|T], EntryId, Context) ->
+  Fun(EntryId, Context).
