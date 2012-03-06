@@ -16,7 +16,7 @@ repost_function(Config, Context) ->
   Password = proplists:get_value(password, Config),
   Journal  = proplists:get_value(journal,  Config),
   Fun = fun(EntryId, Context) -> 
-          repost(Username, Password, Journal, EntryId)
+          repost(Username, Password, Journal, EntryId, Context)
         end,
   Fun.
 
@@ -25,7 +25,7 @@ repost_function(Config, Context) ->
 %%   Only... Why would we want to do that?
 %%   Requires https://github.com/richcarl/xmlrpc/ 
 %%
-repost(Username, Password, EntryId, Context) ->
+repost(Username, Password, Journal, EntryId, Context) ->
   %% Repost the whole body for now
   Body  = m_rsc:p(EntryId, body, Context),
   Title = m_rsc:p(EntryId, title, Context),
