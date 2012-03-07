@@ -122,4 +122,4 @@ generate_auth_header( ConsumerKey, Token, Nonce, SignatureMethod, Signature
                 , "oauth_signature_method=\"", SignatureMethod, "\","
                 , "oauth_timestamp=\"", TimeStamp, "\","
                 , "oauth_token=\"", Token, "\","
-                , "oauth_version=\"", Version, "\","]).
+                , "oauth_version=\"", Version]).
