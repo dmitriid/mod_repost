@@ -21,9 +21,9 @@ repost_function(Config, _Context) ->
   Fun.
 
 %%
-%% @ Livejournal uses XML-RPC. We could construct the request ourselves
-%%   Only... Why would we want to do that?
-%%   Requires https://github.com/richcarl/xmlrpc/ 
+%% @doc Livejournal uses XML-RPC. We could construct the request ourselves
+%%      Only... Why would we want to do that?
+%%      Requires https://github.com/richcarl/xmlrpc/ 
 %%
 repost(Username, Password, Journal, EntryId, Context) ->
   %% Repost the whole body for now
