@@ -11,12 +11,12 @@
 
 -export([repost_function/2]).
 
-repost_function(Config, Context) ->
+repost_function(Config, _Context) ->
   Username = proplists:get_value(username, Config),
   Password = proplists:get_value(password, Config),
   Journal  = proplists:get_value(journal,  Config),
-  Fun = fun(EntryId, Context) -> 
-          repost(Username, Password, Journal, EntryId, Context)
+  Fun = fun(EntryId, Ctxt) -> 
+          repost(Username, Password, Journal, EntryId, Ctxt)
         end,
   Fun.
 
@@ -30,7 +30,7 @@ repost(Username, Password, Journal, EntryId, Context) ->
   Body  = m_rsc:p(EntryId, body, Context),
   Title = m_rsc:p(EntryId, title, Context),
   Url   = get_url(m_rsc:p(EntryId, page_url, Context)),
-  {{Year, Month, Day},{Hour, Minute, )}} = 
+  {{Year, Month, Day},{Hour, Minute, _}} = 
           calendar:now_to_universal_time(now()),
   Body1 = [Body | Url],
   xmlrpc:call( "www.livejournal.com"
@@ -48,4 +48,4 @@ repost(Username, Password, Journal, EntryId, Context) ->
 
 
 get_url(Url) ->
-  lists:flatten(Body, "\n\n", "<a href=\"", Url, "\">", Url, "</a>").
+  lists:flatten("\n\n", "<a href=\"", Url, "\">", Url, "</a>").

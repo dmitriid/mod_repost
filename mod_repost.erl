@@ -21,16 +21,16 @@
 %%
 observe_rsc_update_done( {_Action, EntryId, _Pre, _Post, _PreProps, _PostProps}
                        , Context) ->
-  case can_repost(EntryId, Context) of ->
+  case can_repost(EntryId, Context) of
     true  -> repost(EntryId, Context);
-    false -> ok;
+    false -> ok
   end.
 
 %%
 %% @doc Repost only if it's published and is not a category
 %%
 can_repost(EntryId, Context) ->
-  m_rsc:is_visible(EntryId, Contex) and m_rsc:get(Id, Context) =:= [].
+  m_rsc:is_visible(EntryId, Context) and m_rsc:get(EntryId, Context) =:= [].
 
 %%
 %% @doc Retrieve the actual entry, gather all reposting functions, fire them
@@ -59,4 +59,5 @@ get_repost_functions([Module|T], Context, Acc) ->
 do_repost([], _Entry, _Context) ->
   ok;
 do_repost([Fun|T], EntryId, Context) ->
-  Fun(EntryId, Context).
+  Fun(EntryId, Context),
+  do_repost(T, EntryId, Context).
