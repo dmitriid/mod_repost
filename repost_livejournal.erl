@@ -27,12 +27,16 @@ repost_function(Config, _Context) ->
 %%
 repost(Username, Password, Journal, EntryId, Context) ->
   %% Repost the whole body for now
-  Body  = m_rsc:p(EntryId, body, Context),
-  Title = m_rsc:p(EntryId, title, Context),
-  Url   = get_url(m_rsc:p(EntryId, page_url, Context)),
+  Body0 = m_rsc:p(EntryId, body, Context),
+  Body  = get_text(Body0, Context),
+  
+  Title0 = m_rsc:p(EntryId, title, Context),
+  Title  = get_text(Title0, Context),
+  
+  Url   = get_url(EntryId, Context),
   {{Year, Month, Day},{Hour, Minute, _}} = 
           calendar:now_to_universal_time(now()),
-  Body1 = [Body | Url],
+  Body1 = Body ++ Url,
   xmlrpc:call( "www.livejournal.com"
              , 80
              , "/interface/xmlrpc"
@@ -46,6 +50,13 @@ repost(Username, Password, Journal, EntryId, Context) ->
                            , {hour, Hour}, {min, Minute}
                            , {usejournal, Journal}]}]}).
 
+get_url(EntryId, Context) ->
+  Url = 
+    z_context:abs_url( z_convert:to_binary(m_rsc:p(EntryId, page_url, Context))
+                     , Context),
+  lists:flatten([ "\n\n", "<a href=\"", Url, "\">", Url, "</a>"]).
 
-get_url(Url) ->
-  lists:flatten("\n\n", "<a href=\"", Url, "\">", Url, "</a>").
+get_text({trans, List}, Context) ->
+  Language = z_context:language(Context),
+  Text = proplists:get_value(Language, List, proplists:get_value(en, List, "")),
+  binary_to_list(Text).
