@@ -16,11 +16,12 @@
 
 -export([observe_rsc_update_done/2]).
 
+-include_lib("./../include/zotonic_notifications.hrl").
+
 %%
 %% @doc When resource update is done, repost it
 %%
-observe_rsc_update_done( {_Action, EntryId, _Pre, _Post, _PreProps, _PostProps}
-                       , Context) ->
+observe_rsc_update_done(#rsc_update_done{id=EntryId}, Context) ->
   case can_repost(EntryId, Context) of
     true  -> repost(EntryId, Context);
     false -> ok
@@ -30,7 +31,8 @@ observe_rsc_update_done( {_Action, EntryId, _Pre, _Post, _PreProps, _PostProps}
 %% @doc Repost only if it's published and is not a category
 %%
 can_repost(EntryId, Context) ->
-  m_rsc:is_visible(EntryId, Context) and m_rsc:get(EntryId, Context) =:= [].
+       m_rsc:is_visible(EntryId, Context) 
+  and (m_category:get(EntryId, Context) =:= undefined).
 
 %%
 %% @doc Retrieve the actual entry, gather all reposting functions, fire them
@@ -43,13 +45,12 @@ repost(EntryId, Context) ->
 %% @doc Retrieve a list of repost modules and their configurations
 %%
 get_repost_functions(Context) ->
-  RepostModules = m_config:get(?MODULE, Context),
+  RepostModules = z_config:get(?MODULE, Context),
   get_repost_functions(RepostModules, Context, []).
 
 get_repost_functions([], _Context, Acc) ->
   Acc;
-get_repost_functions([Module|T], Context, Acc) ->
-  Config = m_config:get(?MODULE, Module, Context),
+get_repost_functions([{Module, Config}|T], Context, Acc) ->
   Fun = Module:repost_function(Config, Context),
   get_repost_functions(T, Context, [Fun | Acc]).
 
