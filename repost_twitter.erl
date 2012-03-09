@@ -13,7 +13,7 @@
 
 -define(CONTENT_TYPE, "application/x-www-form-urlencoded").
 -define(TWITTER_URL,  
-        "http://twitter.com/1/statuses/update.json?include_entities=true").
+        "http://api.twitter.com/1/statuses/update.json?include_entities=true").
 
 %%
 %% @doc config should contain the following fields:
@@ -28,10 +28,8 @@
 %%
 
 repost_function(Config, _Context) ->
-  ConsumerKey = proplists:get_value(oauth_consumer_key, Config),
-  Token       = proplists:get_value(oauth_token, Config),
   Fun = fun(EntryId, Ctxt) -> 
-          repost(ConsumerKey, Token, EntryId, Ctxt)
+          repost(Config, EntryId, Ctxt)
         end,
   Fun.
 
@@ -43,16 +41,27 @@ repost_function(Config, _Context) ->
 %%      We only deal with titles and summaries, since this way we don't
 %%      have to clean up links and media from entry body
 %%
-repost(ConsumerKey, Token, EntryId, Context) ->
-  Body  = m_rsc:p(EntryId, summary, Context),
-  Title = m_rsc:p(EntryId, title, Context),
-  Url   = m_rsc:p(EntryId, page_url, Context),
-  PostBody = get_post_body(Title, Body) ++ Url,
+repost(Config, EntryId, Context) ->
+  ConsumerKey    = proplists:get_value(oauth_consumer_key, Config),
+  ConsumerSecret = proplists:get_value(oauth_consumer_secret, Config),
+  Token          = proplists:get_value(oauth_token, Config),
+  TokenSecret    = proplists:get_value(oauth_token_secret, Config),
+
+  Body0 = m_rsc:p(EntryId, summary, Context),
+  Body  = get_text(Body0, Context),
+  
+  Title0 = m_rsc:p(EntryId, title, Context),
+  Title  = get_text(Title0, Context),
+
+  Url   = get_url(EntryId, Context),
+  
+  PostBody = lists:flatten(get_post_body(Title, Body) ++ Url),
   
   Nonce = generate_nonce(EntryId),
   SignatureMethod = "HMAC-SHA1",
-  TimeStamp = 
-    z_datetime:datetime_to_timestamp(calendar:now_to_universal_time(now())),
+  TimeStamp = z_convert:to_list(
+                z_datetime:datetime_to_timestamp(
+                  calendar:local_time()) + 3600),
   Version = "1.0",
   RequestParams = prepare_params([ {"status", PostBody}
                                  , {"include_entities", "true"}
@@ -62,19 +71,20 @@ repost(ConsumerKey, Token, EntryId, Context) ->
                                  , {"oauth_timestamp", TimeStamp}
                                  , {"oauth_token", Token}
                                  , {"oauth_version", Version}]),
-  Signature = generate_signature(RequestParams, ConsumerKey, Token),
+  Signature = generate_signature(RequestParams, ConsumerSecret, TokenSecret),
   AuthHeader = 
     generate_auth_header( ConsumerKey, Token, Nonce, SignatureMethod, Signature
                         , TimeStamp, Version),
   
   Payload = list_to_binary(["status=", z_utils:url_encode(PostBody)]),
-  httpc:request( post                                 % method()
+  Res = httpc:request( post                                 % method()
                , { ?TWITTER_URL                       % request() = { url
                     , [{"Authorization", AuthHeader}] %             , headers
                     , ?CONTENT_TYPE                   %             , content-type
                     , Payload}                        %             , body }
                 , []                                  % http_options()
-                , []).                                % options()
+                , []),                                % options()
+  io:format("~p", [Res]).
 
 
 get_post_body(Title, Body) ->
@@ -83,8 +93,9 @@ get_post_body(Title, Body) ->
 generate_nonce(EntryId) ->
   {{Year, Month, Day},{Hour, Minute, Sec}} = 
           calendar:now_to_universal_time(now()),
-  io_lib:format( "~p~p~p~p~p~p~p"
-               , [Year, Month, Day, Hour, Minute, Sec, EntryId]).
+  Nonce = io_lib:format( "~p~p~p~p~p~p~p"
+                       , [Year, Month, Day, Hour, Minute, Sec, EntryId]),
+  lists:flatten(Nonce).
 
 generate_signature(Params, ConsumerKey, Token) ->
   SignatureString = lists:flatten([ "POST&"
@@ -96,7 +107,7 @@ generate_signature(Params, ConsumerKey, Token) ->
                              , z_utils:url_encode(Token)
                              ]),
   Sha = crypto:sha_mac(SigningKey, SignatureString),
-  base64:encode(Sha).
+  z_convert:to_list(base64:encode(Sha)).
 
 prepare_params(Params) ->
   prepare_params(Params, []).
@@ -122,4 +133,24 @@ generate_auth_header( ConsumerKey, Token, Nonce, SignatureMethod, Signature
                 , "oauth_signature_method=\"", SignatureMethod, "\","
                 , "oauth_timestamp=\"", TimeStamp, "\","
                 , "oauth_token=\"", Token, "\","
-                , "oauth_version=\"", Version]).
+                , "oauth_version=\"", Version, "\""]).
+
+get_text({trans, List}, Context) ->
+  Language = z_context:language(Context),
+  Text = proplists:get_value(Language, List, proplists:get_value(en, List, "")),
+  TextWithMedia = filter_show_media:show_media(Text, Context),
+  process_text(lists:flatten(z_convert:to_list(TextWithMedia))).
+
+process_text(Text) ->
+  lists:flatten(process_text(Text, [])).
+
+  process_text([], Acc) ->
+    Acc;
+  process_text([H|T], Acc) when is_binary(H) ->
+    process_text(T, [Acc | binary_to_list(H)]);
+  process_text([H|T], Acc) ->
+    process_text(T, [Acc | [H]]).
+
+get_url(EntryId, Context) ->
+  z_context:abs_url( z_convert:to_binary(m_rsc:p(EntryId, page_url, Context))
+                   , Context).
