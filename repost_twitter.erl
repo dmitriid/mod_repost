@@ -75,8 +75,8 @@ repost(Config, EntryId, Context) ->
   AuthHeader = 
     generate_auth_header( ConsumerKey, Token, Nonce, SignatureMethod, Signature
                         , TimeStamp, Version),
-  
-  Payload = list_to_binary(["status=", z_utils:url_encode(PostBody)]),
+  io:format("~p", [AuthHeader]),
+  Payload = list_to_binary(["status=", encode(PostBody)]),
   Res = httpc:request( post                                 % method()
                , { ?TWITTER_URL                       % request() = { url
                     , [{"Authorization", AuthHeader}] %             , headers
@@ -97,17 +97,17 @@ generate_nonce(EntryId) ->
                        , [Year, Month, Day, Hour, Minute, Sec, EntryId]),
   lists:flatten(Nonce).
 
-generate_signature(Params, ConsumerKey, Token) ->
+generate_signature(Params, ConsumerSecret, TokenSecret) ->
   SignatureString = lists:flatten([ "POST&"
-                                  , z_utils:url_encode("statuses/update")
+                                  , encode("https://api.twitter.com/1/statuses/update.json")
                                   , "&"
-                                  , z_utils:url_encode(Params)]),
-  SigningKey = lists:flatten([ z_utils:url_encode(ConsumerKey)
+                                  , encode(Params)]),
+  SigningKey = lists:flatten([ encode(ConsumerSecret)
                              , "&"
-                             , z_utils:url_encode(Token)
+                             , encode(TokenSecret)
                              ]),
   Sha = crypto:sha_mac(SigningKey, SignatureString),
-  z_convert:to_list(base64:encode(Sha)).
+  binary_to_list(base64:encode(crypto:sha_mac(SigningKey, SignatureString))).
 
 prepare_params(Params) ->
   prepare_params(Params, []).
@@ -116,7 +116,7 @@ prepare_params([], Acc) ->
   Ordlist = orddict:from_list(Acc),
   params_to_string(Ordlist);
 prepare_params([{Key, Value} | T], Acc) ->
-  Acc1 = [{z_utils:url_encode(Key), z_utils:url_encode(Value)} | Acc],
+  Acc1 = [{encode(Key), encode(Value)} | Acc],
   prepare_params(T, Acc1).
 
 params_to_string(Ordlist) ->
@@ -127,13 +127,13 @@ params_to_string(Ordlist) ->
 generate_auth_header( ConsumerKey, Token, Nonce, SignatureMethod, Signature
                         , TimeStamp, Version) ->
   lists:flatten([ "OAuth "
-                , "oauth_consumer_key=\"", ConsumerKey, "\","
-                , "oauth_nonce\"", Nonce, "\","
-                , "oauth_signature=\"", Signature, "\","
-                , "oauth_signature_method=\"", SignatureMethod, "\","
-                , "oauth_timestamp=\"", TimeStamp, "\","
-                , "oauth_token=\"", Token, "\","
-                , "oauth_version=\"", Version, "\""]).
+                , "oauth_consumer_key=\"", encode(ConsumerKey), "\", "
+                , "oauth_nonce\"", encode(Nonce), "\", "
+                , "oauth_signature=\"", encode(Signature), "\", "
+                , "oauth_signature_method=\"", encode(SignatureMethod), "\", "
+                , "oauth_timestamp=\"", encode(TimeStamp), "\", "
+                , "oauth_token=\"", encode(Token), "\", "
+                , "oauth_version=\"", encode(Version), "\""]).
 
 get_text({trans, List}, Context) ->
   Language = z_context:language(Context),
@@ -154,3 +154,26 @@ process_text(Text) ->
 get_url(EntryId, Context) ->
   z_context:abs_url( z_convert:to_binary(m_rsc:p(EntryId, page_url, Context))
                    , Context).
+
+%% Percent encode
+%% https://github.com/tim/erlang-percent-encoding/blob/master/src/oauth_uri.erl
+%%
+-define(is_uppercase_alpha(C), C >= $A, C =< $Z).
+-define(is_lowercase_alpha(C), C >= $a, C =< $z).
+-define(is_alpha(C), ?is_uppercase_alpha(C); ?is_lowercase_alpha(C)).
+-define(is_digit(C), C >= $0, C =< $9).
+-define(is_alphanumeric(C), ?is_alpha(C); ?is_digit(C)).
+-define(is_unreserved(C), ?is_alphanumeric(C); C =:= $-; C =:= $_; C =:= $.; C =:= $~).
+
+
+encode(Chars) ->
+  encode(Chars, []).
+
+encode([], Encoded) ->
+  lists:flatten(lists:reverse(Encoded));
+encode([C|Etc], Encoded) when ?is_unreserved(C) ->
+  encode(Etc, [C|Encoded]);
+encode([C|Etc], Encoded) ->
+  Value = [io_lib:format("%~s", [z_utils:encode([Char], 16)]) 
+            || Char <- binary_to_list(unicode:characters_to_binary([C]))],
+  encode(Etc, [lists:flatten(Value)|Encoded]).
