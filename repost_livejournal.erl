@@ -52,11 +52,38 @@ repost(Username, Password, Journal, EntryId, Context) ->
 
 get_url(EntryId, Context) ->
   Url = 
-    z_context:abs_url( z_convert:to_binary(m_rsc:p(EntryId, page_url, Context))
+    z_context:abs_url(z_convert:to_binary(m_rsc:p(EntryId, page_url, Context))
                      , Context),
   lists:flatten([ "\n\n", "<a href=\"", Url, "\">", Url, "</a>"]).
 
 get_text({trans, List}, Context) ->
   Language = z_context:language(Context),
   Text = proplists:get_value(Language, List, proplists:get_value(en, List, "")),
-  binary_to_list(Text).
+  TextWithMedia = filter_show_media:show_media(Text, Context),
+  AbsUrl = z_context:abs_url("/", Context),
+  TextAsList = process_text(lists:flatten(z_convert:to_list(TextWithMedia))),
+  process_links(TextAsList, AbsUrl).
+
+process_text(Text) ->
+  lists:flatten(process_text(Text, [])).
+
+  process_text([], Acc) ->
+    Acc;
+  process_text([H|T], Acc) when is_binary(H) ->
+    process_text(T, [Acc | binary_to_list(H)]);
+  process_text([H|T], Acc) ->
+    process_text(T, [Acc | [H]]).
+
+process_links(Text, Url) ->
+  process_links(Text, Url, []).
+
+  process_links([], _, Acc) ->
+    lists:flatten(Acc);
+  % process src="/
+  process_links([$s, $r, $c, $=, $\", $/ | T], Url, Acc) ->
+    process_links(T, Url, [Acc | ["src=\"", Url]]);
+  % process href="/
+  process_links([$h, $r, $e, $f, $=, $\", $/ | T], Url, Acc) ->
+    process_links(T, Url, [Acc | ["href=\"", Url]]);
+  process_links([H|T], Url, Acc) ->
+    process_links(T, Url, [Acc | [H]]).
