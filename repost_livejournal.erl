@@ -80,10 +80,12 @@ process_links(Text, Url) ->
   process_links([], _, Acc) ->
     lists:flatten(Acc);
   % process src="/
-  process_links([$s, $r, $c, $=, $\", $/ | T], Url, Acc) ->
-    process_links(T, Url, [Acc | ["src=\"", Url]]);
+  process_links([$s, $r, $c, $=, Q, $/ | T], Url, Acc) when   Q =:= $\"
+                                                            ; Q =:= $\'->
+    process_links(T, Url, [Acc | ["src=", Q, Url]]);
   % process href="/
-  process_links([$h, $r, $e, $f, $=, $\", $/ | T], Url, Acc) ->
-    process_links(T, Url, [Acc | ["href=\"", Url]]);
+  process_links([$h, $r, $e, $f, $=, Q, $/ | T], Url, Acc)  when   Q =:= $\"
+                                                                 ; Q =:= $\'->
+    process_links(T, Url, [Acc | ["href=", Q, Url]]);
   process_links([H|T], Url, Acc) ->
     process_links(T, Url, [Acc | [H]]).
