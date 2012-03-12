@@ -57,13 +57,14 @@ repost(Config, EntryId, Context) ->
   
   PostBody = get_post_body(Title, Body, Url),
   
-  Res = oauth:post( ?TWITTER_URL
-            , [{"include_entities", "true"}, {"status", PostBody}]
-            , {ConsumerKey, ConsumerSecret, hmac_sha1}
-            , Token
-            , TokenSecret),
-  io:format("~p~n~n",[PostBody]),
-  io:format("~p~n~n",[Res]).
+  {ok, {{_, 200, _}, _, Result}} = 
+    oauth:post( ?TWITTER_URL
+              , [{"include_entities", "true"}, {"status", PostBody}]
+              , {ConsumerKey, ConsumerSecret, hmac_sha1}
+              , Token
+              , TokenSecret),
+  process_result(Result).
+  
 
 get_text({trans, List}, Context) ->
   Language = z_context:language(Context),
@@ -96,3 +97,7 @@ generate_nonce(EntryId) ->
   Nonce = io_lib:format( "~p~p~p~p~p~p~p"
                        , [Year, Month, Day, Hour, Minute, Sec, EntryId]),
   lists:flatten(Nonce).
+
+process_result(Result) ->
+  {struct, Data} = mochijson2:decode(Result),
+  proplists:get_value(<<"id">>, Data).
