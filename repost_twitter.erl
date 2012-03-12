@@ -10,10 +10,10 @@
 -module(repost_twitter).
 
 -export([repost_function/2]).
+-compile(export_all).
 
--define(CONTENT_TYPE, "application/x-www-form-urlencoded").
 -define(TWITTER_URL,  
-        "http://api.twitter.com/1/statuses/update.json?include_entities=true").
+        "https://api.twitter.com/1/statuses/update.json").
 
 %%
 %% @doc config should contain the following fields:
@@ -55,85 +55,15 @@ repost(Config, EntryId, Context) ->
 
   Url   = get_url(EntryId, Context),
   
-  PostBody = lists:flatten(get_post_body(Title, Body) ++ Url),
+  PostBody = get_post_body(Title, Body, Url),
   
-  Nonce = generate_nonce(EntryId),
-  SignatureMethod = "HMAC-SHA1",
-  TimeStamp = z_convert:to_list(
-                z_datetime:datetime_to_timestamp(
-                  calendar:local_time()) + 3600),
-  Version = "1.0",
-  RequestParams = prepare_params([ {"status", PostBody}
-                                 , {"include_entities", "true"}
-                                 , {"oauth_consumer_key", ConsumerKey}
-                                 , {"oauth_nonce", Nonce}
-                                 , {"oauth_signature_method", SignatureMethod}
-                                 , {"oauth_timestamp", TimeStamp}
-                                 , {"oauth_token", Token}
-                                 , {"oauth_version", Version}]),
-  Signature = generate_signature(RequestParams, ConsumerSecret, TokenSecret),
-  AuthHeader = 
-    generate_auth_header( ConsumerKey, Token, Nonce, SignatureMethod, Signature
-                        , TimeStamp, Version),
-  io:format("~p", [AuthHeader]),
-  Payload = list_to_binary(["status=", encode(PostBody)]),
-  Res = httpc:request( post                                 % method()
-               , { ?TWITTER_URL                       % request() = { url
-                    , [{"Authorization", AuthHeader}] %             , headers
-                    , ?CONTENT_TYPE                   %             , content-type
-                    , Payload}                        %             , body }
-                , []                                  % http_options()
-                , []),                                % options()
-  io:format("~p", [Res]).
-
-
-get_post_body(Title, Body) ->
-  z_string:truncate([Title | Body], 114).  %% 140 - 25 for link - 1 for ... char 
-
-generate_nonce(EntryId) ->
-  {{Year, Month, Day},{Hour, Minute, Sec}} = 
-          calendar:now_to_universal_time(now()),
-  Nonce = io_lib:format( "~p~p~p~p~p~p~p"
-                       , [Year, Month, Day, Hour, Minute, Sec, EntryId]),
-  lists:flatten(Nonce).
-
-generate_signature(Params, ConsumerSecret, TokenSecret) ->
-  SignatureString = lists:flatten([ "POST&"
-                                  , encode("https://api.twitter.com/1/statuses/update.json")
-                                  , "&"
-                                  , encode(Params)]),
-  SigningKey = lists:flatten([ encode(ConsumerSecret)
-                             , "&"
-                             , encode(TokenSecret)
-                             ]),
-  Sha = crypto:sha_mac(SigningKey, SignatureString),
-  binary_to_list(base64:encode(crypto:sha_mac(SigningKey, SignatureString))).
-
-prepare_params(Params) ->
-  prepare_params(Params, []).
-
-prepare_params([], Acc) ->
-  Ordlist = orddict:from_list(Acc),
-  params_to_string(Ordlist);
-prepare_params([{Key, Value} | T], Acc) ->
-  Acc1 = [{encode(Key), encode(Value)} | Acc],
-  prepare_params(T, Acc1).
-
-params_to_string(Ordlist) ->
-  KeyValueList =
-      [lists:flatten([Key, "=", Value]) || {Key, Value} <- Ordlist],
-  string:join(KeyValueList, "&").
-
-generate_auth_header( ConsumerKey, Token, Nonce, SignatureMethod, Signature
-                        , TimeStamp, Version) ->
-  lists:flatten([ "OAuth "
-                , "oauth_consumer_key=\"", encode(ConsumerKey), "\", "
-                , "oauth_nonce\"", encode(Nonce), "\", "
-                , "oauth_signature=\"", encode(Signature), "\", "
-                , "oauth_signature_method=\"", encode(SignatureMethod), "\", "
-                , "oauth_timestamp=\"", encode(TimeStamp), "\", "
-                , "oauth_token=\"", encode(Token), "\", "
-                , "oauth_version=\"", encode(Version), "\""]).
+  Res = oauth:post( ?TWITTER_URL
+            , [{"include_entities", "true"}, {"status", PostBody}]
+            , {ConsumerKey, ConsumerSecret, hmac_sha1}
+            , Token
+            , TokenSecret),
+  io:format("~p~n~n",[PostBody]),
+  io:format("~p~n~n",[Res]).
 
 get_text({trans, List}, Context) ->
   Language = z_context:language(Context),
@@ -152,28 +82,17 @@ process_text(Text) ->
     process_text(T, [Acc | [H]]).
 
 get_url(EntryId, Context) ->
-  z_context:abs_url( z_convert:to_binary(m_rsc:p(EntryId, page_url, Context))
-                   , Context).
+  lists:flatten(z_context:abs_url( z_convert:to_binary(m_rsc:p(EntryId, page_url, Context))
+                   , Context)).
 
-%% Percent encode
-%% https://github.com/tim/erlang-percent-encoding/blob/master/src/oauth_uri.erl
-%%
--define(is_uppercase_alpha(C), C >= $A, C =< $Z).
--define(is_lowercase_alpha(C), C >= $a, C =< $z).
--define(is_alpha(C), ?is_uppercase_alpha(C); ?is_lowercase_alpha(C)).
--define(is_digit(C), C >= $0, C =< $9).
--define(is_alphanumeric(C), ?is_alpha(C); ?is_digit(C)).
--define(is_unreserved(C), ?is_alphanumeric(C); C =:= $-; C =:= $_; C =:= $.; C =:= $~).
+get_post_body(Title, Body, Url) ->
+  Text = lists:flatten([Title, ": ", Body]),
+  %% 140 - (link) - (1 for '...' char)
+  lists:flatten([z_string:truncate(Text, 110), " ", Url]).   
 
-
-encode(Chars) ->
-  encode(Chars, []).
-
-encode([], Encoded) ->
-  lists:flatten(lists:reverse(Encoded));
-encode([C|Etc], Encoded) when ?is_unreserved(C) ->
-  encode(Etc, [C|Encoded]);
-encode([C|Etc], Encoded) ->
-  Value = [io_lib:format("%~s", [z_utils:encode([Char], 16)]) 
-            || Char <- binary_to_list(unicode:characters_to_binary([C]))],
-  encode(Etc, [lists:flatten(Value)|Encoded]).
+generate_nonce(EntryId) ->
+  {{Year, Month, Day},{Hour, Minute, Sec}} = 
+          calendar:now_to_universal_time(now()),
+  Nonce = io_lib:format( "~p~p~p~p~p~p~p"
+                       , [Year, Month, Day, Hour, Minute, Sec, EntryId]),
+  lists:flatten(Nonce).

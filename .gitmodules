@@ -1,3 +1,0 @@
-[submodule "deps/xmlrpc"]
-	path = deps/xmlrpc
-	url = https://github.com/etnt/xmlrpc
